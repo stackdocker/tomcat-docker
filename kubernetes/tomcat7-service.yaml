@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: tomcat7
+  name: tomcat7
+  namespace: default
+spec:
+  # clusterIP: 10.123.244.157
+  # portalIP: 10.123.244.157
+  ports:
+  - # nodePort: 32552
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    run: tomcat7
+  sessionAffinity: None
+  type: NodePort

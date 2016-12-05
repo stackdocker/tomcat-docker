@@ -1,0 +1,195 @@
+FROM debian:jessie
+MAINTAINER tangfeixiong <tangfx128@gmail.com>
+# Inspired by: [docker official](https://github.com/docker-library/buildpack-deps/blob/a0a59c61102e8b079d568db69368fb89421f75f2/jessie/curl/Dockerfile)
+# [and](https://github.com/docker-library/buildpack-deps/blob/1845b3f918f69b4c97912b0d4d68a5658458e84f/jessie/scm/Dockerfile)
+# [and](https://github.com/docker-library/buildpack-deps/blob/11492c68d993221fd5cd4d8a980354634fc165dd/jessie/Dockerfile)
+# [and](https://github.com/docker-library/docs/tree/master/tomcat)
+# [oracle official](https://github.com/oracle/docker-images/blob/master/OracleJava/java-7/Dockerfile)
+
+ARG debian_jessie_mirror
+ARG java_pkg=server-jre-7u80-linux-x64.tar.gz
+ARG tomcat_pkg=apache-tomcat-7.0.73.tar.gz
+ARG tomcat_sig=apache-tomcat-7.0.73.tar.gz.asc
+ARG tomcat_key=apache-tomcat-7.0.73.KEYS
+
+COPY / /tmp/build/
+
+ENV JAVA_HOME /opt/java
+ENV CATALINA_HOME /opt/tomcat
+# let "Tomcat Native" live somewhere isolated
+ENV TOMCAT_NATIVE_LIBDIR $CATALINA_HOME/native-jni-lib
+ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$TOMCAT_NATIVE_LIBDIR
+ENV PATH $CATALINA_HOME/bin:$JAVA_HOME/bin:$PATH
+### ENV OPENSSL_VERSION 1.0.2j-1~bpo8+1
+ENV OPENSSL_VERSION 1.1.0c-2
+# Default to UTF-8 file.encoding
+ENV LANG C.UTF-8
+
+### The internal /etc/apt/sources.list
+### deb http://deb.debian.org/debian jessie main
+### deb http://deb.debian.org/debian jessie-updates main
+### deb http://security.debian.org jessie/updates main
+### The auto mirror =>   http://httpredir.debian.org/debian
+### The local mirror =>  http://mirrors.aliyun.com/debian
+
+RUN set -x \
+  && JAVA_SRC=/tmp/build/download/java/${java_pkg:-java.tar.gz} \
+  && mkdir -p "$JAVA_HOME" \
+  && tar -C "$JAVA_HOME" --strip-components=1 -zxf "$JAVA_SRC" \
+  && JAVA_STUFF=" \
+        README.html \
+        release \
+        THIRDPARTYLICENSEREADME.txt \
+        THIRDPARTYLICENSEREADME-JAVAFX.txt \
+        db \
+        jre/{README,THIRDPARTYLICENSEREADME.txt,HIRDPARTYLICENSEREADME-JAVAFX.txt,Welcome.html} \
+        jre/plugin \
+        jre/bin/{javaws,jjs,keytool,orbd,pack200,policytool,rmid,rmiregistry,servertool,tnameserv,unpack200} \
+        jre/lib/{javaws.jar,deploy*,desktop,*javafx*,*jfx*} \
+        jre/lib/amd64/{libdecora_sse.so,libprism_*.so,libfxplugins.so,libglass.so,libgstreamer-lite.so,libjavafx*.so,libjfx*.so} \
+        jre/lib/ext/{jfxrt.jar,nashorn.jar} \
+        jre/lib/{oblique-fonts,plugin.jar} \
+        man/{ja,ja_JP.UTF-8} \
+  " \
+  && for i in $JAVA_STUFF; do rm -rf $JAVA_HOME/$i; done \
+  && DEBIAN_JESSIE_REPO=${debian_jessie_mirror:-http://httpredir.debian.org/debian} \
+  && sed "s%http://deb.debian.org/debian%$DEBIAN_JESSIE_REPO%g;s%^\(deb http://security\.debian\.org.*\)$%# \1%g" /etc/apt/sources.list \
+  && curlDeps=" \
+        ca-certificates \
+        curl \
+        wget \
+  " \
+  && scmDeps=" \
+        bzr \
+        git \
+        mercurial \
+        openssh-client \
+        subversion \
+        procps \
+  " \
+  && buildDeps=" \
+        autoconf \
+        automake \
+        bzip2 \
+        file \
+        g++ \
+        gcc \
+        imagemagick \
+        libbz2-dev \
+        libc6-dev \
+        libcurl4-openssl-dev \
+        libdb-dev \
+        libevent-dev \
+        libffi-dev \
+        libgdbm-dev \
+        libgeoip-dev \
+        libglib2.0-dev \
+        libjpeg-dev \
+        libkrb5-dev \
+        liblzma-dev \
+        libmagickcore-dev \
+        libmagickwand-dev \
+        libmysqlclient-dev \
+        libncurses-dev \
+        libpng-dev \
+        libpq-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        libtool \
+        libwebp-dev \
+        libxml2-dev \
+        libxslt-dev \
+        libyaml-dev \
+        make \
+        patch \
+        xz-utils \
+        zlib1g-dev \
+  " \
+  && compressDeps=" \
+        bzip2 \
+        unzip \
+        xz-utils \
+  " \
+    && { \
+		echo 'deb http://httpredir.debian.org/debian/ stretch main'; \
+	} > /etc/apt/sources.list.d/stretch.list \
+    && { \
+# add a negative "Pin-Priority" so that we never ever get packages from stretch unless we explicitly request them
+		echo 'Package: *'; \
+		echo 'Pin: release n=stretch'; \
+		echo 'Pin-Priority: -10'; \
+		echo; \
+# except OpenSSL, which is the reason we're here
+		echo 'Package: openssl libssl*'; \
+		echo "Pin: version $OPENSSL_VERSION"; \
+		echo 'Pin-Priority: 990'; \
+	} > /etc/apt/preferences.d/stretch-openssl \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        procps \        
+		libapr1 \
+    && apt-get install -t stretch -y --no-install-recommends \
+		openssl="$OPENSSL_VERSION" \
+	&& rm -rf /var/lib/apt/lists/* \
+# add a simple script that can auto-detect the appropriate JAVA_HOME value
+# based on whether the JDK or only the JRE is installed
+    && { \
+		echo '#!/bin/sh'; \
+		echo 'set -e'; \
+		echo; \
+		echo 'dirname "$(dirname "$(readlink -f "$(which javac || which java)")")"'; \
+	} > /usr/local/bin/docker-java-home \
+	&& chmod +x /usr/local/bin/docker-java-home \
+	&& [ "$JAVA_HOME" = "$(docker-java-home)" ] \
+  && TOMCAT_SRC=/tmp/build/download/tomcat/${tomcat_pkg:=tomcat.tar.gz} \
+  && cd $(dirname $TOMCAT_SRC) \
+  && if [ -n "$tomcat_key" -a -n "$tomcat_sig" ]; then \
+        gpg --import $tomcat_key; \
+        gpg --batch --verify $tomcat_sig $TOMCAT_SRC; \
+  fi \
+  && mkdir -p "$CATALINA_HOME" \
+  && tar -C $CATALINA_HOME --strip-components=1 -zxf $TOMCAT_SRC \
+  && cd $CATALINA_HOME \
+	&& rm bin/*.bat \
+	&& nativeBuildDir="$(mktemp -d)" \
+	&& tar -xvf bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1 \
+	&& nativeBuildDeps=" \
+		gcc \
+		libapr1-dev \
+		libssl-dev \
+		make \
+	" \
+	&& apt-get update \
+    && apt-get install -y --no-install-recommends $nativeBuildDeps \
+    && rm -rf /var/lib/apt/lists/* \
+	&& ( \
+		export CATALINA_HOME="$PWD" \
+		&& cd "$nativeBuildDir/native" \
+		&& ./configure \
+			--libdir="$TOMCAT_NATIVE_LIBDIR" \
+			--prefix="$CATALINA_HOME" \
+			--with-apr="$(which apr-1-config)" \
+			--with-java-home="$(docker-java-home)" \
+			--with-ssl=yes \
+		&& make -j$(nproc) \
+		&& make install \
+	) \
+	&& apt-get purge -y --auto-remove $nativeBuildDeps \
+	&& rm -rf "$nativeBuildDir" \
+	&& rm bin/tomcat-native.tar.gz \
+    && rm -rf /tmp/build
+
+# verify Tomcat Native is working properly
+RUN set -e \
+	&& nativeLines="$(catalina.sh configtest 2>&1)" \
+	&& nativeLines="$(echo "$nativeLines" | grep 'Apache Tomcat Native')" \
+	&& nativeLines="$(echo "$nativeLines" | sort -u)" \
+	&& if ! echo "$nativeLines" | grep 'INFO: Loaded APR based Apache Tomcat Native library' >&2; then \
+		echo >&2 "$nativeLines"; \
+		exit 1; \
+	fi
+
+EXPOSE 8080
+CMD ["catalina.sh", "run"]

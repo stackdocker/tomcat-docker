@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    run: tomcat7
+  name: tomcat7
+  namespace: default
+spec:
+  containers:
+  - image: 10.64.33.81:5000/tomcat:7-serverjre7-centos7
+    imagePullPolicy: IfNotPresent
+    name: tomcat7
+    resources: {}
+    command:
+    - catalina.sh
+    - run
+    env:
+    - name:  CATALINA_OPTS
+      value: -Xms64m -Xmx256m -XX:PermSize=64m -XX:MaxPermSize=256
+  dnsPolicy: ClusterFirst
+  imagePullSecrets:
+  - name: registry81
+  restartPolicy: Always
+  securityContext: {}
