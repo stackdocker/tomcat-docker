@@ -1,19 +1,49 @@
-## Content
+# Content
 
+## 7.0.73
+
+### Feature
+
+OpenSSL 1.0.2j+
+    
+* CentOS7: make
+    
+* Debian: jessie stretch 
+
+NIO
+
+* APR
+    
 ### Build
 
 For example Tomcat 7 with Oracle Server JRE 7, CentOS 7 base
 
-    [vagrant@localhost tomcat-docker]$ docker build --no-cache -t tangfeixiong/tomcat:7-serverjre7-centos7 -f 7.0.73/Dockerfile.apache-tomcat-7%2E0%2E73%2Etar%2Egz.server-jre-7u80-linux-x64%2Etar%2Egz.centos%3Acentos7 .
+    [vagrant@localhost tomcat-docker]$ docker build --no-cache -t tangfeixiong/tomcat:7-serverjre7-centos7 -f 7.0.73/Dockerfile.apache-tomcat-7%2E0%2E73%2Etar%2Egz.server-jre-7u80-linux-x64%2Etar%2Egz.centos%3Acentos7 7.0.73/
 
-_sample.war_
+_size_
 
-    [vagrant@localhost tomcat]$ curl -jkSL http://tomcat.apache.org/tomcat-6.0-doc/appdev/sample/sample.war -O
+    [vagrant@localhost tomcat-docker]$ docker images tangfeixiong/tomcat
+    REPOSITORY            TAG                    IMAGE ID            CREATED             VIRTUAL SIZE
+    tangfeixiong/tomcat   7-serverjre7-centos7   cafba7665a07        48 seconds ago      414.7 MB
 
 _administrator_
 
     tangf@DESKTOP-H68OQDV /cygdrive/f/99-mirror/https%3A%2F%2Fwww.apache.org%2Fdist%2Ftomcat/apache-tomcat-7.0.73/conf
     $ sed 's/.*<\/tomcat-users>.*/  <role rolename="manager-gui"\/>\n  <role rolename="admin-gui"\/>\n  <user username="admin" password="admin123" roles="manager-gui,admin-gui"\/>\n&/' tomcat-users.xml
+
+`printenv`
+
+    [vagrant@localhost tomcat-docker]$ docker run -t --rm tangfeixiong/tomcat:7-serverjre7-centos7 printenv
+    PATH=/opt/tomcat/bin:/opt/java/bin:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    HOSTNAME=1b7fd9a79b71
+    TERM=xterm
+    JAVA_HOME=/opt/java
+    CATALINA_HOME=/opt/tomcat
+    TOMCAT_NATIVE_LIBDIR=/opt/tomcat/native-jni-lib
+    LD_LIBRARY_PATH=/opt/tomcat/native-jni-lib
+    OPENSSL_INSTALL_DIR=/opt/openssl
+    CATALINA_OPTS=-Xms64M -Xmx256M -XX:PermSize=64m -XX:MaxPermSize=256m
+    HOME=/root
 
 ### Kubernetes
 
@@ -29,6 +59,12 @@ _administrator_
 
 
 ### Validate
+
+_sample.war_
+
+    [vagrant@localhost tomcat]$ curl -jkSL http://tomcat.apache.org/tomcat-6.0-doc/appdev/sample/sample.war -O
+
+Log
 
     [vagrant@localhost tomcat-docker]$ docker run -t --rm tangfeixiong/tomcat:7-serverjre7-centos7
     Dec 03, 2016 4:50:04 PM org.apache.catalina.startup.VersionLoggerListener log INFO: Server version:        Apache Tomcat/7.0.73

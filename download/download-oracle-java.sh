@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+# curl -jkSLH "Cookie: oraclelicense=accept-securebackup-cookie; " http://download.oracle.com/otn-pub/java/jdk/7u80-b15/server-jre-7u80-linux-x64.tar.gz -o 12.1.3/download/server-jre-7u80-linux-x64.tar.gz
+
 usage() {
         echo "Usage: $0 [-f] [-o]
         -f        Force to download or overwrite existed. optional
@@ -12,9 +14,8 @@ CONTEXT_DIR=$(dirname "${BASH_SOURCE}")
 DOWNLOAD_DIR=$CONTEXT_DIR/download
 
 # JAVA_URL=http://download.oracle.com/otn-pub/java/8u92-b14/server-jre-8u92-linux-x64.tar.gz
-JAVA_URL=http://download.oracle.com/otn-pub/java/jdk/8u112-b15/server-jre-8u112-linux-x64.tar.gz
-
-# curl -jkSLH "Cookie: oraclelicense=accept-securebackup-cookie; " http://download.oracle.com/otn-pub/java/jdk/7u80-b15/server-jre-7u80-linux-x64.tar.gz -o 12.1.3/download/server-jre-7u80-linux-x64.tar.gz
+# JAVA_URL=http://download.oracle.com/otn-pub/java/jdk/8u112-b15/server-jre-8u112-linux-x64.tar.gz
+JAVA_URL=http://download.oracle.com/otn-pub/java/jdk/7u80-b15/server-jre-7u80-linux-x64.tar.gz
 
 JAVA_TGT=java.tar.gz
 FORCE_DL=false

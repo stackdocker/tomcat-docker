@@ -1,33 +1,63 @@
 FROM centos:centos7
 MAINTAINER tangfeixiong <tangfx128@gmail.com>
 
-ARG java_pkg=server-jre-7u80-linux-x64.tar.gz
-ARG tomcat_pkg=apache-tomcat-7.0.73.tar.gz
-ARG tomcat_sig=apache-tomcat-7.0.73.tar.gz.asc
-ARG tomcat_key=apache-tomcat-7.0.73.KEYS
-ARG openssl_pkg=openssl-1.0.2j.tar.gz
+# curl_host: Mirror server.
+ARG curl_host="http://172.17.4.1:48080"
+# java_path: Oracle Java dist server path, or local archive dir (default is <build context>/download/java).
+ARG java_path="99-mirror/http%3A%2F%2Fdownload.oracle.com/otn-pub%2Fjava%2Fjdk%2F7u80-b15"
+# java_pkg: Oracle Java dist package (default is server-jre-7u80-linux-x64.tar.gz).
+ARG java_pkg="server-jre-7u80-linux-x64.tar.gz"
+# tomcat_path: Apache Tomcat dist server path, or local archive dir (default is <build context>/download/tomcat).
+ARG tomcat_path="99-mirror/%2E%2E%2Fworkspace%2Fsrc%2Fgithub.com%2Fstackdocker%2Ftomcat-docker%2Fdownload%2Ftomcat"
+# tomcat_pkg: Apache Tomcat dist package (default is apache-tomcat-7.0.73.tar.gz).
+ARG tomcat_pkg="apache-tomcat-7.0.73.tar.gz"
+ARG tomcat_sig="apache-tomcat-7.0.73.tar.gz.asc"
+ARG tomcat_key="apache-tomcat-7.0.73.KEYS"
+# openssl_path: OpenSSL dist server path, or local archive dir (default is <build context>/download/openssl).
+ARG openssl_path="99-mirror/%2E%2E%2Fworkspace%2Fsrc%2Fgithub.com%2Fstackdocker%2Ftomcat-docker%2Fdownload%2Fopenssl"
+# openssl_pkg: OpenSSL source package (default is openssl-1.0.2j.tar.gz).
+ARG openssl_pkg="openssl-1.0.2j.tar.gz"
+# rpm_path: CentOS7 package server path, or local RPM dir (default is <build context>/download/centos7/rpm).
+ARG rpm_path="99-mirror/%2E%2E%2Fworkspace%2Fsrc%2Fgithub.com%2Fstackdocker%2Ftomcat-docker%2Fdownload%2Fcentos7%2Frpm"
 
 COPY / /tmp/build/
 
-ENV JAVA_HOME /opt/java
-ENV CATALINA_HOME /opt/tomcat
-ENV TOMCAT_NATIVE_LIBDIR $CATALINA_HOME/native-jni-lib
+ENV OPENSSL_INSTALL_DIR="/opt/openssl" \
+    JAVA_HOME="/opt/java" \
+    CATALINA_HOME="/opt/tomcat" \
+    TOMCAT_NATIVE_LIBDIR="/opt/tomcat/native-jni-lib"
+# ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PATH $OPENSSL_INSTALL_DIR/bin:$JAVA_HOME/bin:$CATALINA_HOME/bin:$PATH
 ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH:+$LD_LIBRARY_PATH:}$TOMCAT_NATIVE_LIBDIR
-ENV OPENSSL_INSTALL_DIR /opt/openssl
-ENV PATH $CATALINA_HOME/bin:$JAVA_HOME/bin:$OPENSSL_INSTALL_DIR/bin:$PATH
 # Default to UTF-8 file.encoding
-### ENV LANG C.UTF-8
+# ENV LANG C.UTF-8
 
-RUN javaInstallPackage=/tmp/build/download/java/${java_pkg:-java.tar.gz} \
-  && mkdir -p "$JAVA_HOME" \
-  && tar -C "$JAVA_HOME" --strip-components=1 -zxf "$javaInstallPackage" \
-  && rm $javaInstallPackage \
-  && javaSlim=" \
+RUN set -x \
+    && temp_dir=/tmp/build \
+    && mkdir -p "$JAVA_HOME" \
+    && javaSrcDir="$temp_dir${java_path:-/download/java}" \
+    && if [ -d "$javaSrcDir" ]; then \
+        javaSrcPkg="$javaSrcDir${java_pkg:-/java.tar.gz}"; \
+        [ -f "$javaSrcPkg" ] \
+            && tar -C "$JAVA_HOME" --strip-components=1 -zxf "$javaSrcPkg" \
+            && rm -rf "$javaSrcDir" \
+            || mv "$javaSrcDir" $JAVA_HOME; \
+    else \
+        javaURL="${curl_host:-http://download.oracle.com}/${java_path:-'otn/java/jdk/7u80-b15'}/${java_pkg:-'server-jre-7u80-linux-x64.tar.gz'}"; \
+        [[ ! "$javaURL" =~ https?://download\.oracle\.com/?.* ]] \
+            && curl -jkSL ${javaURL//%/%25} \
+                | gunzip \
+                | tar -x -C $JAVA_HOME --strip-components=1 \
+            || curl -jkSLH "Cookie: oraclelicense=accept-securebackup-cookie; " "$javaURL" \
+                | gunzip \
+                | tar -x -C "$JAVA_HOME" --strip-components=1; \
+    fi \
+    && javaInstallSlim=" \
         README.html \
         release \
         THIRDPARTYLICENSEREADME*.txt \
         *src.zip \
-        db \
+        ### db
         jre/README \
         jre/THIRDPARTYLICENSEREADME*.txt \
         jre/Welcome.html \
@@ -64,91 +94,143 @@ RUN javaInstallPackage=/tmp/build/download/java/${java_pkg:-java.tar.gz} \
         lib/visualvm \
         man/ja \
         man/ja_JP.UTF-8 \
-  " \
-  && for i in $javaSlim; do rm -rf $JAVA_HOME/$i; done \
-  && tomcatInstallPackage=/tmp/build/download/tomcat/${tomcat_pkg:=tomcat.tar.gz} \
-  && cd $(dirname $tomcatInstallPackage) \
-  && if [ -n "$tomcat_key" -a -n "$tomcat_sig" ]; then \
-        gpg2 --import $tomcat_key; \
-        gpg2 --batch --verify $tomcat_sig $tomcatInstallPackage; \
-        [ -n "$tomcat_key" ] && rm $tomcat_key; \
-        [ -n "$tomcat_sig" ] && rm $tomcat_sig; \
-  fi \
-  && mkdir -p "$CATALINA_HOME" \
-  && tar -C $CATALINA_HOME --strip-components=1 -zxf $tomcatInstallPackage \
-  && rm $tomcatInstallPackage \
-  && tomcatSlim=" \
-###     NOTICE
-###     RELEASE-NOTES
-###     RUNNING.txt
+    " \
+    && for i in $javaInstallSlim; do \
+        rm -rf $JAVA_HOME/$i; \
+    done \
+# Tomcat
+    && mkdir -p "$CATALINA_HOME" \
+    && tomcatSrcDir="$temp_dir${tomcat_path:-/download/tomcat}" \
+    && if [ -d "$tomcatSrcDir" ]; then \
+        tomcatSrcPkg="$tomcatSrcDir${tomcat_pkg:-/tomcat.tar.gz}"; \
+        if [ -f "$tomcatSrcPkg" ]; then \
+            cd $(dirname $tomcatSrcDir); \
+            if [ -n "$tomcat_key" -a -n "$tomcat_sig" ]; then \
+                gpg2 --import $tomcat_key; \
+                gpg2 --batch --verify $tomcat_sig $tomcatSrcPkg; \
+                [ -n "$tomcat_key" ] && rm $tomcat_key; \
+                [ -n "$tomcat_sig" ] && rm $tomcat_sig; \
+            fi; \
+            tar -C "$CATALINA_HOME" --strip-components=1 -zxf "$tomcatSrcPkg"; \
+            rm -rf $tomcatSrcDir; \
+        else \
+            mv "$tomcatSrcDir" $CATALINA_HOME; \
+        fi; \
+    else \
+        tomcatURL="${curl_host:-'https://archive.apache.org'}/${tomcat_path:-'dist/tomcat/tomcat-7/v7.0.73'}/${tomcat_pkg:-'apache-tomcat-7.0.73.tar.gz'}"; \
+        [[ $tomcatURL =~ (https?|ftp)://.* ]] \
+            && curl -jkSL ${tomcatURL//%/%25} \
+                | gunzip \
+                | tar -x -C $CATALINA_HOME --strip-components=1 \
+            || curl -jkSL "https://archive.apache.org/dist/tomcat/tomcat-7/v7.0.73/apache-tomcat-7.0.73.tar.gz" \
+                | gunzip \
+                | tar -x -C $CATALINA_HOME --strip-components=1; \    
+    fi \
+    && tomcatInstallSlim=" \
+        NOTICE \
+        ### RELEASE-NOTES
+        RUNNING.txt \
         bin/*.bat \
         temp/*.tmp \
-###     webapps/docs
-###     webapps/examples
-  " \
-  && for i in $tomcatSlim; do rm -rf $CATALINA_HOME/$i; done \
-### yum --downloadonly --downloaddir=/tmp/download/oraclelinux7/rpm/ install apr-devel openssl-devel gcc make perl
-  && install_rpms=" \
-    	apr-1.4.8-3.el7.x86_64.rpm \
-    	apr-devel-1.4.8-3.el7.x86_64.rpm \
-    	cpp-4.8.5-4.el7.x86_64.rpm \
-    	gcc-4.8.5-4.el7.x86_64.rpm \
-    	groff-base-1.22.2-8.el7.x86_64.rpm \
-    	keyutils-libs-devel-1.5.8-3.el7.x86_64.rpm \
-    	libcom_err-devel-1.42.9-7.el7.x86_64.rpm \
-    	libgomp-4.8.5-4.el7.x86_64.rpm \
-    	libmpc-1.0.1-3.el7.x86_64.rpm \
-    	libselinux-devel-2.2.2-6.el7.x86_64.rpm \
-    	libsepol-devel-2.1.9-3.el7.x86_64.rpm \
-    	libverto-devel-0.2.5-4.el7.x86_64.rpm \
-    	make-3.82-21.el7.x86_64.rpm \
-    	mpfr-3.1.1-4.el7.x86_64.rpm \
-    	perl-5.16.3-286.el7.x86_64.rpm \
-    	perl-Carp-1.26-244.el7.noarch.rpm \
-    	perl-constant-1.27-2.el7.noarch.rpm \
-    	perl-Encode-2.51-7.el7.x86_64.rpm \
-    	perl-Exporter-5.68-3.el7.noarch.rpm \
-    	perl-File-Path-2.09-2.el7.noarch.rpm \
-    	perl-File-Temp-0.23.01-3.el7.noarch.rpm \
-    	perl-Filter-1.49-3.el7.x86_64.rpm \
-    	perl-Getopt-Long-2.40-2.el7.noarch.rpm \
-    	perl-HTTP-Tiny-0.033-3.el7.noarch.rpm \
-    	perl-libs-5.16.3-286.el7.x86_64.rpm \
-    	perl-macros-5.16.3-286.el7.x86_64.rpm \
-    	perl-parent-0.225-244.el7.noarch.rpm \
-    	perl-PathTools-3.40-5.el7.x86_64.rpm \
-    	perl-Pod-Escapes-1.04-286.el7.noarch.rpm \
-    	perl-podlators-2.5.1-3.el7.noarch.rpm \
-    	perl-Pod-Perldoc-3.20-4.el7.noarch.rpm \
-    	perl-Pod-Simple-3.28-4.el7.noarch.rpm \
-    	perl-Pod-Usage-1.63-3.el7.noarch.rpm \
-    	perl-Scalar-List-Utils-1.27-248.el7.x86_64.rpm \
-    	perl-Socket-2.010-3.el7.x86_64.rpm \
-    	perl-Storable-2.45-3.el7.x86_64.rpm \
-    	perl-Text-ParseWords-3.29-4.el7.noarch.rpm \
-    	perl-threads-1.87-4.el7.x86_64.rpm \
-    	perl-threads-shared-1.43-6.el7.x86_64.rpm \
-    	perl-Time-HiRes-1.9725-3.el7.x86_64.rpm \
-    	perl-Time-Local-1.2300-2.el7.noarch.rpm \
-    	zlib-devel-1.2.7-15.el7.x86_64.rpm \
-    	openssl-devel-1.0.1e-51.el7_2.7.x86_64.rpm \
-    	glibc-devel-2.17-106.el7_2.8.x86_64.rpm \
-    	glibc-headers-2.17-106.el7_2.8.x86_64.rpm \
-    	kernel-headers-3.10.0-327.36.3.el7.x86_64.rpm \
-    	krb5-devel-1.13.2-12.el7_2.x86_64.rpm \
-    	pcre-devel-8.32-15.el7_2.1.x86_64.rpm \
-  " \
-  ### cd /tmp/build/download/oraclelinux7/rpm
-  ### rpm -Uvh $install_rpms
-  && ssl_apr_buildPackage="apr-devel openssl-devel gcc make perl" \
-  && yum install -y $ssl_apr_buildPackage \
-  && rpm -V $ssl_apr_buildPackage \
-  && opensslInstallPackage=/tmp/build/download/openssl/${openssl_pkg:-openssl.tar.gz} \
-  && mkdir -p "$OPENSSL_INSTALL_DIR" \
-  && opensslBuildDir="$(mktemp -d)" \
-  && tar -zxf $opensslInstallPackage -C "$opensslBuildDir" --strip-components=1 \
-  && rm $opensslInstallPackage \
-  && ( \
+        ### webapps/docs
+        ### webapps/examples
+    " \
+    && for i in $tomcatInstallSlim; \
+        do rm -rf $CATALINA_HOME/$i; \
+    done \
+# build packages
+    && install_PKGs="apr-devel openssl-devel gcc make perl" \
+# packages: yum --downloadonly --downloaddir=/tmp/download/oraclelinux7/rpm/ install $install_PKGs
+    && install_RPMs=" \
+        apr-1.4.8-3.el7.x86_64.rpm \
+        apr-devel-1.4.8-3.el7.x86_64.rpm \
+        cpp-4.8.5-4.el7.x86_64.rpm \
+        gcc-4.8.5-4.el7.x86_64.rpm \
+        groff-base-1.22.2-8.el7.x86_64.rpm \
+        keyutils-libs-devel-1.5.8-3.el7.x86_64.rpm \
+        libcom_err-devel-1.42.9-7.el7.x86_64.rpm \
+        libgomp-4.8.5-4.el7.x86_64.rpm \
+        libmpc-1.0.1-3.el7.x86_64.rpm \
+        libselinux-devel-2.2.2-6.el7.x86_64.rpm \
+        libsepol-devel-2.1.9-3.el7.x86_64.rpm \
+        libverto-devel-0.2.5-4.el7.x86_64.rpm \
+        make-3.82-21.el7.x86_64.rpm \
+        mpfr-3.1.1-4.el7.x86_64.rpm \
+        perl-5.16.3-286.el7.x86_64.rpm \
+        perl-Carp-1.26-244.el7.noarch.rpm \
+        perl-constant-1.27-2.el7.noarch.rpm \
+        perl-Encode-2.51-7.el7.x86_64.rpm \
+        perl-Exporter-5.68-3.el7.noarch.rpm \
+        perl-File-Path-2.09-2.el7.noarch.rpm \
+        perl-File-Temp-0.23.01-3.el7.noarch.rpm \
+        perl-Filter-1.49-3.el7.x86_64.rpm \
+        perl-Getopt-Long-2.40-2.el7.noarch.rpm \
+        perl-HTTP-Tiny-0.033-3.el7.noarch.rpm \
+        perl-libs-5.16.3-286.el7.x86_64.rpm \
+        perl-macros-5.16.3-286.el7.x86_64.rpm \
+        perl-parent-0.225-244.el7.noarch.rpm \
+        perl-PathTools-3.40-5.el7.x86_64.rpm \
+        perl-Pod-Escapes-1.04-286.el7.noarch.rpm \
+        perl-podlators-2.5.1-3.el7.noarch.rpm \
+        perl-Pod-Perldoc-3.20-4.el7.noarch.rpm \
+        perl-Pod-Simple-3.28-4.el7.noarch.rpm \
+        perl-Pod-Usage-1.63-3.el7.noarch.rpm \
+        perl-Scalar-List-Utils-1.27-248.el7.x86_64.rpm \
+        perl-Socket-2.010-3.el7.x86_64.rpm \
+        perl-Storable-2.45-3.el7.x86_64.rpm \
+        perl-Text-ParseWords-3.29-4.el7.noarch.rpm \
+        perl-threads-1.87-4.el7.x86_64.rpm \
+        perl-threads-shared-1.43-6.el7.x86_64.rpm \
+        perl-Time-HiRes-1.9725-3.el7.x86_64.rpm \
+        perl-Time-Local-1.2300-2.el7.noarch.rpm \
+        zlib-devel-1.2.7-15.el7.x86_64.rpm \
+        openssl-devel-1.0.1e-51.el7_2.7.x86_64.rpm \
+        glibc-devel-2.17-106.el7_2.8.x86_64.rpm \
+        glibc-headers-2.17-106.el7_2.8.x86_64.rpm \
+        kernel-headers-3.10.0-327.36.3.el7.x86_64.rpm \
+        krb5-devel-1.13.2-12.el7_2.x86_64.rpm \
+        pcre-devel-8.32-15.el7_2.1.x86_64.rpm \
+    " \
+    && sourceDir="$temp_dir${rpm_path:-/download/centos7/rpm}" \
+    && if [ -d "$sourceDir" ]; then \
+        cd "$sourceDir"; \
+        rpm -Uvh $install_RPMs; \
+    fi \
+    && sourcePath="${curl_host:-''}/${rpm_path:-''}" \
+    && if [[ $sourcePath =~ (https?|ftp)://.* ]]; then \
+        sourceDir="$(mktemp -d)"; \
+        cd "$sourceDir"; \
+        for i in $install_RPMs; do \
+            curl -jkSL "${sourcePath//%/%25}/${i##*( )}" -O; \
+        done; \
+        rpm -Uvh *; \
+        rm -rf "$sourceDir"; \
+    else \
+        yum install -y $install_PKGs; \
+        rpm -V $install_PKGs; \
+        yum clean all; \
+    fi \
+# OpenSSL make
+    && mkdir -p "$OPENSSL_INSTALL_DIR" \
+    && opensslBuildDir="$(mktemp -d)" \
+    && opensslSrcDir="$temp_dir${openssl_path:-/download/openssl}" \
+    && if [ -d "$opensslSrcDir" ]; then \
+        opensslSrcPkg="$opensslSrcDir${openssl_pkg:-/openssl.tar.gz}"; \
+        [ -f "$opensslSrcPkg" ] \
+            && tar -zxf $opensslSrcPkg -C "$opensslBuildDir" --strip-components=1 \
+            && rm -rf $opensslSrcPkg \
+            || mv "$opensslSrcDir" $opensslBuildDir; \
+    else \
+        openssl_url="${curl_host:-'https://www.openssl.org'}/${openssl_path:-'source'}/${openssl_pkg:-'openssl-1.1.0c.tar.gz'}"; \
+        [[ $openssl_url =~ (https?|ftp)://.* ]] \
+            && curl -jkSL ${openssl_url//%/%25} \
+                | gunzip \
+                | tar -x -C $opensslBuildDir --strip-components=1 \
+            || curl -jkSL "https://www.openssl.org/source/openssl-1.1.0c.tar.gz" \
+                | gunzip \
+                | tar -x -C $opensslBuildDir --strip-components=1; \
+    fi \
+    && ( \
         cd "$opensslBuildDir" \
         && ./Configure shared -fPIC \
                 --prefix="$OPENSSL_INSTALL_DIR" \
@@ -156,26 +238,29 @@ RUN javaInstallPackage=/tmp/build/download/java/${java_pkg:-java.tar.gz} \
                 linux-x86_64 \
         && make \
         && make install \
-  ) \
-  && rm -rf $opensslBuildDir \
-  && nativeBuildDir="$(mktemp -d)" \
-  && tar -zxf $CATALINA_HOME/bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1 \
-  && ( \
+    ) \
+    && rm -rf $opensslBuildDir \
+# tcnative make
+    && mkdir -p $TOMCAT_NATIVE_LIBDIR \
+    && tcnativeBuildDir="$(mktemp -d)" \
+    && tar -zxf $CATALINA_HOME/bin/tomcat-native.tar.gz -C "$tcnativeBuildDir" --strip-components=1 \
+    && ( \
 		export CATALINA_HOME="$CATALINA_HOME" \
-		&& cd "$nativeBuildDir/native" \
+		&& cd "$tcnativeBuildDir/native" \
 		&& ./configure \
-			--libdir="$TOMCAT_NATIVE_LIBDIR" \
-			--prefix="$CATALINA_HOME" \
-			--with-apr="/usr/bin/apr-1-config" \
-			--with-java-home="$JAVA_HOME" \
-			--with-ssl="$OPENSSL_INSTALL_DIR" \
+			    --libdir="$TOMCAT_NATIVE_LIBDIR" \
+			    --prefix="$CATALINA_HOME" \
+			    --with-apr="/usr/bin/apr-1-config" \
+			    --with-java-home="$JAVA_HOME" \
+			    --with-ssl="$OPENSSL_INSTALL_DIR" \
 		&& make -j$(nproc) \
 		&& make install \
 	) \
-  && rm -rf $nativeBuildDir \
-  && yum remove -y $ssl_apr_buildPackage \
-  && yum clean all \
-  && rm -rf /tmp/build
+    && rm -rf $tcnativeBuildDir \
+# finally
+    && yum remove -y $install_PKGs \
+    && yum clean all \
+    && rm -rf /tmp/build
 
 # verify Tomcat Native is working properly
 RUN set -e \
@@ -186,11 +271,11 @@ RUN set -e \
 		echo >&2 "$nativeLines"; \
 		exit 1; \
 	fi \
-  && sed -i 's/.*<\/tomcat-users>.*/  <role rolename="manager-gui"\/>\n  <role rolename="admin-gui"\/>\n  <user username="admin" password="admin123" roles="manager-gui,admin-gui"\/>\n&/' \
+    && sed -i 's/.*<\/tomcat-users>.*/  <role rolename="manager-gui"\/>\n  <role rolename="admin-gui"\/>\n  <user username="admin" password="admin123" roles="manager-gui,admin-gui"\/>\n&/' \
         $CATALINA_HOME/conf/tomcat-users.xml \
-  && sed -i 's/.*<\/Context>.*/  <Valve className="org.apache.catalina.valves.RemoteAddrValve"\n    allow="127\\.\\d+\\.\\d+\\.\\d+|::1|10\\.\\d+\\.\\d+\\.\\d+|172\\.1[6-9]\\.\\d+\\.\\d+|172\\.2[0-9]\\.\\d+\\.\\d+|172\\.3[01]\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+"\/>\n&/' \
+    && sed -i 's/.*<\/Context>.*/  <Valve className="org.apache.catalina.valves.RemoteAddrValve"\n    allow="127\\.\\d+\\.\\d+\\.\\d+|::1|10\\.\\d+\\.\\d+\\.\\d+|172\\.1[6-9]\\.\\d+\\.\\d+|172\\.2[0-9]\\.\\d+\\.\\d+|172\\.3[01]\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+"\/>\n&/' \
         $CATALINA_HOME/webapps/manager/META-INF/context.xml \
-  && sed -i 's/.*<\/Context>.*/  <Valve className="org.apache.catalina.valves.RemoteAddrValve"\n    allow="127\\.\\d+\\.\\d+\\.\\d+|::1|10\\.\\d+\\.\\d+\\.\\d+|172\\.1[6-9]\\.\\d+\\.\\d+|172\\.2[0-9]\\.\\d+\\.\\d+|172\\.3[01]\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+"\/>\n&/' \
+    && sed -i 's/.*<\/Context>.*/  <Valve className="org.apache.catalina.valves.RemoteAddrValve"\n    allow="127\\.\\d+\\.\\d+\\.\\d+|::1|10\\.\\d+\\.\\d+\\.\\d+|172\\.1[6-9]\\.\\d+\\.\\d+|172\\.2[0-9]\\.\\d+\\.\\d+|172\\.3[01]\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+"\/>\n&/' \
         $CATALINA_HOME/webapps/host-manager/META-INF/context.xml
 
 ENV CATALINA_OPTS "-Xms64M -Xmx256M -XX:PermSize=64m -XX:MaxPermSize=256m"
