@@ -57,7 +57,22 @@ RUN set -x \
         release \
         THIRDPARTYLICENSEREADME*.txt \
         *src.zip \
-        ### db
+        db/3RDPARTY \
+        db/NOTICE \
+        db/README-JDK.html \
+        db/RELEASE-NOTES.html \
+        db/bin/*.bat \
+        db/lib/derbyLocale_de_DE.jar \
+        db/lib/derbyLocale_es.jar \
+        db/lib/derbyLocale_fr.jar \
+        db/lib/derbyLocale_hu.jar \
+        db/lib/derbyLocale_it.jar\
+        db/lib/derbyLocale_ja_JP.jar \
+        db/lib/derbyLocale_ko_KR.jar \
+        db/lib/derbyLocale_pl.jar \
+        db/lib/derbyLocale_pt_BR.jar \
+        db/lib/derbyLocale_ru.jar \
+        db/lib/derbyLocale_zh_TW.jar \
         jre/README \
         jre/THIRDPARTYLICENSEREADME*.txt \
         jre/Welcome.html \

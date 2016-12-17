@@ -14,11 +14,12 @@ if [ -e /bin/docker -o -e /usr/bin/docker -o -e /usr/local/bin/docker ]; then
     if [[ $(docker version -f {{.Client.Version}}) =~ [1-9]\.[1-9]+\.[1-9]+ ]]; then
 
 install_pkgs="
+    glibc-common \
     apr-devel \
-	openssl-devel \
-	gcc \
-	make \
-	perl \
+    openssl-devel \
+    gcc \
+    make \
+    perl \
 "
 
 docker run -t --rm -v $download_dir:/tmp/download centos:centos7 \

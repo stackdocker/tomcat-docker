@@ -111,6 +111,7 @@ RUN set -x \
         unzip \
         xz-utils \
   " \
+# http://serverfault.com/questions/775298/debian-jessie-nginx-with-openssl-1-0-2-to-use-alpn-rather-than-npn
     && { \
 		echo 'deb http://httpredir.debian.org/debian/ stretch main'; \
 	} > /etc/apt/sources.list.d/stretch.list \
