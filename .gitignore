@@ -1,5 +1,12 @@
 **/*.tar
 **/*.gz
 **/*.zip
+
 **/*.rpm
+
 **/*.war
+**/*.jar
+
+**/*dms
+
+!download/tomcat/sample.war
